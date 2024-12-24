@@ -42,22 +42,16 @@ Ogeh, stack protector!!
 2. Install tools from Windows DDK into %PATH%
 3. Prepare debuggable Windows 2.x copy using folder WINBOOT from your DDK set
 4. Go to the folder of win2stub_dd (you'd have to rename it to 8.3 format maybe)
-5. `make makefile`. This should compile a bunch of *.obj files, and link them into a file egahibw.drv. Res file is already pre-compiled
+5. `make makefile`. This should compile a bunch of `*.obj` files, and link them into a file egahibw.drv. Res file is already pre-compiled
 6. Copy egahibw.drv into your WINBOOT folder
 7. Run `symdev kernel.exe` from your WINBOOT folder. 
 8. Press `g` and `Enter` to start the system. Press Alt+F4 to initiate "This will end your windows sessions" Dialogue. Press "Enter" to exit.
 
+![](readme.png)
+
 ## Known issues
-Despite my best efforts to stub the video driver, it still relies on the mode setting in egahibw.asm:physical_enable:
+The default IBM PC keyboard driver has a special check for text/graphics mode, and turns itself out
+when BIOS reports its in the text mode. There's a ever-so-slightly patched keyboard driver in KEYBOARD
+folder that works with this video driver.
 
-``` 
-mov ax, 0010h
-int 10h
-```
-
-If you will try to comment out the mode setting, some parts of the system stop working. Mouse seems to be working still, but pressing Alt+F4 and 
-Enter doesn't result in exiting Windows - indicating some major issue. I suspected it was an issue with video memory addresses used somewhere 
-directly, but setting up a graphics mode that uses 0xB8000 as a base address works just as well as the mode with 0xA0000 as a base address. Super 
-weird. Gotta look at it when less sleepy.
-
-Also, there's still a lot of cleanup needed.
+There's still a lot of code cleanup needed.

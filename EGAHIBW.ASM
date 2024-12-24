@@ -439,10 +439,10 @@ physical_enable proc near
 ;	stosb
 
 
-;;; ikuyo
+;;; Graphics mode is not needed anymore.
 
-	mov	ax,0010h		;Set color graphics
-	int	10h
+;	mov	ax,0010h		;Set color graphics
+;	int	10h
 
 ;	mov	ax,0F00h		;See if it was set
 ;	int	10h

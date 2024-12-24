@@ -74,6 +74,8 @@ ifdef	 EXCLUSION
 	externNP unexclude		;Clear excluded area
 endif
 
+	externFP OutputDebugString
+
 
 sBegin	Data
 
@@ -196,12 +198,7 @@ page
 
 cBegin
 
-;	mov ah, 09h
-;	mov al, "S"
- ;       mov bl, 04Dh
-;	mov cx, 3
-;	int 10h
-	
+	cCall OutputDebugString, <lp_string>
 
 exit_strblt_null:
 	xor	ax,ax			;Return DX:AX = 0000:0000
