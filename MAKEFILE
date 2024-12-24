@@ -65,7 +65,7 @@ scanlr.obj:   scanlr.asm
 scanline.obj:   scanline.asm
         masm -z-t-Ml-b63 scanline;
 
-polyline.obj:   polyline.asm polyline.inc plylocal.inc
+polyline.obj:   polyline.asm plylocal.inc
         masm -z-t-Ml-b63 polyline;
 
 strblt.obj:   strblt.asm strblt.inc fontseg.inc
@@ -85,12 +85,10 @@ cursor.obj:      cursor.asm    egamemd.inc cursor.inc
 egahibw.obj:   egahibw.asm
         masm -z-t-Ml-b63 egahibw;
 
-3xswitch.obj:   3xswitch.asm
-        masm -z-t-Ml-b63 3xswitch;
 
 egahibw.drv: egahibw.def egahibw.lnk egahibw.res                \
 		         egahibw.obj	       cursor.obj	\
-		         bitblt.obj	       3xswitch.obj	\
+		         bitblt.obj	       	\
 		          	       scanlr.obj	\
 		         pixel.obj	      	\
 		         output.obj	       polyline.obj	\

@@ -73,7 +73,7 @@ incOutput	= 1			;Include GDI Output definitions
 	include display.inc
 	include egamem.inc
 	include macros.mac
-	include polyline.inc   		; polyline equates file.
+;	include polyline.inc   		; polyline equates file.
 	.list
 
 

@@ -47,5 +47,5 @@ EXPORTS
     MoveCursor          @103    ;; commented out
     CheckCursor         @104    ;; commented out
 
-IMPORTS
-    ScreenSwitchEnable	= KEYBOARD.100		;For DOS 3.x Box
+;IMPORTS
+;    ScreenSwitchEnable	= KEYBOARD.100		;For DOS 3.x Box

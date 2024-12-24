@@ -35,11 +35,8 @@ endif
 	include macros.mac
 	.list
 
-	externFP ScreenSwitchEnable	;Imported from KEYBOARD.DRV
 	externFP GetModuleHandle
 	externFP GetProcAddress
-	externNP dev_to_background	;Switch to background code
-	externNP dev_to_foreground	;Switch to foreground code
 	externNP dev_initialization	;Other boot-time initialization
 
 
@@ -62,16 +59,16 @@ IS_BUSY	equ	0			;should be public in cursors.asm!
 
 
 pre_switch	label	word
-		dw	pre_switch_to_background
-		dw	pre_switch_to_foreground
+;		dw	pre_switch_to_background
+;		dw	pre_switch_to_foreground
 
 post_switch	label	word
-		dw	post_switch_to_background
-		dw	post_switch_to_foreground
+;		dw	post_switch_to_background
+;		dw	post_switch_to_foreground
 
 switch_table	label	word		;Screen switch dispatch table
-		dw	dev_to_background
-		dw	dev_to_foreground
+;		dw	dev_to_background
+;		dw	dev_to_foreground
 
 switch_control	db	0		;Switch control flags
 PREVENT_SWITCH	equ	10000000b	;Don't allow switch (DOS 3.x, 4.x)
@@ -93,408 +90,10 @@ sEnd	Data
 sBegin	Code
 assumes cs,Code
 
-	externW		_cstods
 
 prev_int_2Fh	dd	0		;Previous int 2Fh vector
 page
 
-;-------------------------Interrupt-Handler-----------------------------;
-; screen_switch_hook
-;
-; Watches calls to the OS/2 multiplex interrupt chain, and traps calls
-; to the driver to save or restore the state of the display hardware
-; before a context switch.
-;
-; If a save/restore call is recognized, then it will be dispatched
-; to the device dependent handler unless PREVENT_SWITCH is
-; set in switch_control.
-;
-;   Currently under OS/2, we inform the keyboard driver that the
-;   hot key is not to be passed along to DOS whenever the display
-;   driver cannot save it's state (this currently only occurs when
-;   we've already saved the EGA state).  Since OS/2 will only take
-;   the screen away from us when the hot key is pressed, we should
-;   never see the PREVENT_SWITCH bit set).
-;
-;   If we're not running under OS/2, it is possible a pop-up not
-;   caused by a hot key could try and grab the screen away from us .
-;   In this case, we'll return with 'C' set to show that it's a real
-;   bad time and try again later (they may still grab it, though).
-;   In this case, PREVENT_SWITCH could be set.
-;
-; Entry:
-;	AH = multiplex number
-;	AL = function code
-; Returns:
-;	'C' set if screen switch cannot occur (DOS's < 10.0)
-;	'C' clear otherwise
-; Registers Preserved:
-;	AL,BX,CX,DX,SI,DI,BP,DS,ES,SS
-; Registers Destroyed:
-;	AH,FLAGS
-; Calls:
-;	dev_to_background
-;	dev_to_foreground
-; History:
-;	Sun 20-Sep-1987 23:02:58 -by-  **** ***** [*****]
-;	Added switch_control flag,
-;
-;	Wed 16-Sep-1987 20:17:08 -by-  *** ****** [******]
-;	Wrote it.
-;-----------------------------------------------------------------------;
-
-;------------------------------Pseudo-Code------------------------------;
-; {
-; }
-;-----------------------------------------------------------------------;
-
-	assumes ds,nothing
-	assumes es,nothing
-
-screen_switch_hook proc far
-
-	cmp	ax,SCREEN_SWITCH_IN
-	je	screen_switch_occurring
-	cmp	ax,SCREEN_SWITCH_OUT
-	je	screen_switch_occurring
-	jmp	prev_int_2Fh		;Not ours, pass it along
-
-screen_switch_occurring:
-	push	bp			;set up frame for altering flags
-	mov	bp,sp
-
-	push	ds
-	mov	ds,[_cstods]
-	assumes	ds,Data
-
-	mov	ah,switch_control
-	add	ah,ah
-	jc	exit_screen_switch_error
-	errnz	PREVENT_SWITCH-10000000b
-
-
-ifdef	OS2_ONLY
-	pusha
-else
-	push	ax
-	push	bx
-	push	cx
-	push	dx
-	push	si
-	push	di
-endif
-	push	es
-	and	ax,00000010b		;Use D1 of function to index into
-	xchg	ax,bx			;  the two word dispatch table
-	errnz	SCREEN_SWITCH_OUT-4001h
-	errnz	SCREEN_SWITCH_IN-4002h
-	call	pre_switch[bx]
-	push	bx
-	push	ds
-	call	switch_table[bx]	;this guy only saved BP
-	pop	ds
-	assumes	ds,Data
-	pop	bx
-	call	post_switch[bx]
-	pop	es
-	assumes es,nothing
-
-ifdef	OS2_ONLY
-	popa
-else
-	pop	di
-	pop	si
-	pop	dx
-	pop	cx
-	pop	bx
-	pop	ax
-endif
-
-	pop	ds
-	assumes ds,nothing
-
-
-;	Note that BP is still on the stack (hence FLAGS_ON_STACK+2).
-
-	and	wptr [bp][FLAGS_ON_STACK][2],not CARRY_FLAG
-	pop	bp
-	iret
-
-exit_screen_switch_error:
-	pop	ds
-	assumes ds,nothing
-
-	or	wptr [bp][FLAGS_ON_STACK][2],CARRY_FLAG
-	pop	bp
-	iret
-
-screen_switch_hook	endp
-page
-
-
-
-;---------------------------Public-Routine-----------------------------;
-; pre_switch_to_foreground
-;
-; This function is called when switching to the foreground, before
-; any device-specific code has executed.
-;
-; Entry:
-;	DS = Data
-; Returns:
-;	DS = Data
-; Registers Preserved:
-;	BX,SI,DI,BP,DS
-; Registers Destroyed:
-;	AX,CX,DX,ES,FLAGS
-; Calls:
-; History:
-;	Mon 05-Oct-1987 20:13:46 -by-  **** ***** [*****]
-;	Moved repaint address fetch to hook_int_2F
-;
-;	Mon 05-Oct-1987 20:17:08 -by-  *** ****** [******]
-;	Wrote it.
-;-----------------------------------------------------------------------;
-
-;------------------------------Pseudo-Code------------------------------;
-; {
-; }
-;-----------------------------------------------------------------------;
-
-	assumes ds,Data
-	assumes es,nothing
-
-pre_switch_to_foreground	proc	near
-
-	push	bx			;Save dispatch table index
-	mov	ax,wptr repaint_addr[0] ;We expect to always have the
-	or	ax,wptr repaint_addr[2] ;  address, but let's be sure
-	jz	pre_switch_to_fore_exit
-	call	repaint_addr		;Force repaint of all windows
-
-pre_switch_to_fore_exit:
-	pop	bx
-	ret
-
-pre_switch_to_foreground	endp
-
-
-;---------------------------Public-Routine-----------------------------;
-; pre_switch_to_background
-;
-; This function is called when switching to the background, before
-; any device-specific code has executed.
-;
-; Entry:
-;	DS = Data
-; Returns:
-;	DS = Data
-; Registers Preserved:
-;	AH,BX,CX,DX,SI,DI,BP,DS,ES,FLAGS
-; Registers Destroyed:
-;	AL
-; Calls:
-; History:
-;	Mon 05-Oct-1987 20:17:08 -by-  *** ****** [******]
-;	Wrote it.
-;-----------------------------------------------------------------------;
-
-;------------------------------Pseudo-Code------------------------------;
-; {
-; }
-;-----------------------------------------------------------------------;
-
-	assumes ds,Data
-	assumes es,nothing
-
-pre_switch_to_background	proc	near
-
-	mov	al,IS_BUSY		;disable mouse cursor drawing code
-	cli
-	xchg	al,screen_busy		;say it's busy
-	xchg	al,old_screen_busy	;store old flag semaphore value
-	sti
-
-	ret
-
-pre_switch_to_background	endp
-
-
-;---------------------------Public-Routine-----------------------------;
-; post_switch_to_foreground
-;
-; This function is called when switching to the foreground, after
-; any device-specific code has executed.
-;
-; Entry:
-;	DS = Data
-; Returns:
-;	DS = Data
-; Registers Preserved:
-;	AH,BX,CX,DX,SI,DI,BP,DS,ES,FLAGS
-; Registers Destroyed:
-;	AL
-; Calls:
-; History:
-;	Mon 05-Oct-1987 20:17:08 -by-  *** ****** [******]
-;	Wrote it.
-;-----------------------------------------------------------------------;
-
-;------------------------------Pseudo-Code------------------------------;
-; {
-; }
-;-----------------------------------------------------------------------;
-
-	assumes ds,Data
-	assumes es,nothing
-
-post_switch_to_foreground	proc	near
-
-	cli
-	mov	al,old_screen_busy	;reenable mouse cursor drawing code
-	xchg	al,screen_busy		;set semaphore to old value
-	sti
-
-	ret
-
-post_switch_to_foreground	endp
-
-
-;---------------------------Public-Routine-----------------------------;
-; post_switch_to_background
-;
-; This function is called when switching to the background, after
-; any device-specific code has executed.
-;
-; Entry:
-;	DS = Data
-; Returns:
-;	DS = Data
-; Registers Preserved:
-;	AX,BX,CX,DX,SI,DI,BP,DS,ES,FLAGS
-; Registers Destroyed:
-;	None
-; Calls:
-; History:
-;	Mon 05-Oct-1987 20:17:08 -by-  *** ****** [******]
-;	Wrote it.
-;-----------------------------------------------------------------------;
-
-;------------------------------Pseudo-Code------------------------------;
-; {
-; }
-;-----------------------------------------------------------------------;
-
-	assumes ds,Data
-	assumes es,nothing
-
-post_switch_to_background	proc	near
-
-	ret
-
-post_switch_to_background	endp
-
-
-;---------------------------Public-Routine-----------------------------;
-; disable_switching
-;
-; This function is called whenever we need to prevent a screen switch
-; from occuring.
-;
-; Entry:
-;	DS = Data
-; Returns:
-;	DS = Data
-; Registers Preserved:
-;	SI,DI,BP,DS
-; Registers Destroyed:
-;	AX,BX,CX,DX,ES,FLAGS
-; Calls:
-;	ScreenSwitchEnable in keybaord.drv
-; History:
-;	Sun 20-Sep-1987 19:00:13 -by-  **** ***** [*****]
-;	Added switch_control flag.
-;
-;	Wed 16-Sep-1987 20:17:08 -by-  *** ****** [******]
-;	Wrote it.
-;-----------------------------------------------------------------------;
-
-;------------------------------Pseudo-Code------------------------------;
-; {
-; }
-;-----------------------------------------------------------------------;
-
-	assumes ds,Data
-	assumes es,nothing
-
-	public	disable_switching
-
-disable_switching proc	near
-
-	mov	al,switch_control	;Must have correct DOS version
-	test	al,DO_SWITCHING
-	jz	disable_switching_exit
-	test	al,DISABLE_HOT_KEY	;Only call keyboard driver if
-	jz	show_switch_disabled	;  we need to
-	xor	ax,ax
-	cCall	ScreenSwitchEnable,<ax>
-
-show_switch_disabled:
-	or	switch_control,PREVENT_SWITCH
-
-disable_switching_exit:
-	ret
-
-disable_switching endp
-page
-
-;---------------------------Public-Routine-----------------------------;
-; enable_switching
-;
-; This function is called whenever we can allow a screen group switch.
-;
-; Entry:
-;	DS = Data
-; Returns:
-;	DS = Data
-; Registers Preserved:
-;	SI,DI,BP,DS
-; Registers Destroyed:
-;	AX,BX,CX,DX,ES,FLAGS
-; Calls:
-;	ScreenSwitchEnable in keybaord.drv
-; History:
-;	Sun 20-Sep-1987 19:00:13 -by-  **** ***** [*****]
-;	Added switch_control flag.
-;
-;	Wed 16-Sep-1987 20:17:08 -by-  *** ****** [******]
-;	Wrote it.
-;-----------------------------------------------------------------------;
-
-;------------------------------Pseudo-Code------------------------------;
-; {
-; }
-;-----------------------------------------------------------------------;
-
-	assumes ds,Data
-	assumes es,nothing
-
-	public	enable_switching
-
-enable_switching proc	near
-
-	mov	al,switch_control
-	and	al,not PREVENT_SWITCH
-	mov	switch_control,al
-	test	al,DISABLE_HOT_KEY
-	jz	enable_switching_exit
-	mov	ax,0FFFFh
-	cCall	ScreenSwitchEnable,<ax>
-
-enable_switching_exit:
-	ret
-
-enable_switching endp
 
 sEnd	Code
 page
@@ -547,64 +146,6 @@ assumes cs,InitSeg
 		public	hook_int_2Fh
 hook_int_2Fh	proc	near
 
-	push	bx
-	push	cx
-	push	dx
-	push	ds
-	push	es
-
-;	See if we already have repaint_addr.
-	mov	ax,wptr [repaint_addr][0]
-	or	ax,wptr [repaint_addr][2]
-	jnz	hook_int_2f_repaint_addr
-
-;	Need module handle to pass to GetProcAddress.
-	mov	ax,DataOFFSET user_string
-	farPtr	module_name,ds,ax
-	cCall	GetModuleHandle,<module_name>
-	
-;	Get the value of repaint_addr.
-	xchg	ax,bx
-	mov	ax,REPAINT_EXPORT_INDEX
-	cwd
-	farPtr	func_number,dx,ax
-	cCall	GetProcAddress,<bx,func_number>
-	mov	wptr [repaint_addr][0],ax
-	mov	wptr [repaint_addr][2],dx
-
-hook_int_2f_repaint_addr:
-
-	mov	al,switch_control	;Only hook if we have the correct DOS
-	xor	al,INT_2F_HOOKED
-	test	al,DO_SWITCHING+INT_2F_HOOKED
-	jz	hook_int_done		;Don't need to hook it
-
-
-	cli	
-	or	switch_control,INT_2F_HOOKED
-	xor	ax,ax
-	mov	ds,ax
-	assumes ds,nothing
-
-	mov	ax,CodeBASE		;Code is a static segment, so it
-	mov	es,ax			;  won't be moving on us
-	assumes es,Code
-
-	xchg	ax,wptr ds:[INT_MULT*4][2]
-	mov	wptr prev_int_2Fh[2],ax
-	mov	ax,CodeOFFSET screen_switch_hook
-	xchg	ax,wptr ds:[INT_MULT*4][0]
-	mov	wptr prev_int_2Fh[0],ax
-	sti
-
-hook_int_done:
-	pop	es
-	assumes es,nothing
-	pop	ds
-	assumes ds,nothing
-	pop	dx
-	pop	cx
-	pop	bx
 	ret
 
 hook_int_2Fh	endp
@@ -649,32 +190,6 @@ page
 
 restore_int_2Fh proc	near
 
-	test	switch_control,INT_2F_HOOKED
-	jz	restore_done
-	cli	
-	and	switch_control,not INT_2F_HOOKED
-
-	push	es
-	push	ds
-	xor	ax,ax
-	mov	ds,ax
-	assumes ds,nothing
-
-	mov	ax,CodeBASE		;Code is a static segment, so it
-	mov	es,ax			;  won't be moving on us
-	assumes es,Code
-
-	mov	ax,wptr prev_int_2Fh[0]
-	xchg	wptr ds:[INT_MULT*4][0],ax
-	mov	ax,wptr prev_int_2Fh[2]
-	xchg	wptr ds:[INT_MULT*4][2],ax
-	sti
-	pop	ds
-	assumes ds,nothing
-	pop	es
-	assumes	es,Data
-
-restore_done:
 	ret
 
 restore_int_2Fh endp
@@ -720,21 +235,6 @@ page
 cProc	driver_initialization,<FAR,PUBLIC>,<si,di>
 
 cBegin
-       jmp dont_support_switching
-
-	mov	ah,30h			;Check DOS version number
-        int     21h
-	xchg	al,ah			;Correct order for comparing
-	xor	bl,bl			;Accumulate flags here
-	cmp	ax,DOS_VERSION		;Earliest DOS we must support (10.0)			 ;10 or higher means OS/2
-	jb	dont_support_switching
-	or	bl,DO_SWITCHING 	;Have to handle screen group switches
-	cmp	ax,HOT_KEY_VERSION
-	jb	save_switch_control
-	or	bl,DISABLE_HOT_KEY	;Can disable hot key
-
-save_switch_control:
-	mov	switch_control,bl
 
 dont_support_switching:
 	call	dev_initialization	;Device specific initialization

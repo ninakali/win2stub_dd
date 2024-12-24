@@ -1,5 +1,5 @@
          egahibw.obj	       cursor.obj	+
-         bitblt.obj	       3xswitch.obj	+
+         bitblt.obj	       	+
           	       scanlr.obj	+
          pixel.obj	      	+
          output.obj	       polyline.obj	+
