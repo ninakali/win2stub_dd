@@ -1,0 +1,115 @@
+#   Windows EGA & VGA driver makefile.
+#
+#   Requirements:
+#
+#       MASM 5.10 or greater with the environment variable INCLUDE set to
+#	the directories containing CMACROS.INC, GDIDEFS.INC, and WINDEFS.INC.
+#
+
+#   Define the dependencies
+
+inquire.obj:    inquire.asm
+        masm -z-t-Ml-b63 inquire;
+
+setmode.obj:   setmode.asm
+        masm -z-t-Ml-b63 setmode;
+
+enable.obj:   enable.asm
+        masm -z-t-Ml-b63 enable;
+
+disable.obj:   disable.asm
+        masm -z-t-Ml-b63 disable;
+
+chkstk.obj:   chkstk.asm
+        masm -z-t-Ml-b63 chkstk;
+
+cursors.obj:   cursors.asm
+        masm -z-t-Ml-b63 cursors;
+
+control.obj:   control.asm
+        masm -z-t-Ml-b63 control;
+
+fb.obj:   fb.asm
+        masm -z-t-Ml-b63 fb;
+
+charwdth.obj:   charwdth.asm fontseg.inc
+        masm -z-t-Ml-b63 charwdth;
+
+dither.obj:     dither.asm
+        masm -z-t-Ml-b63 dither;
+
+sswitch.obj:   sswitch.asm
+        masm -z-t-Ml-b63 sswitch;
+
+robject.obj:   robject.asm
+        masm -z-t-Ml-b63 robject;
+
+enum.obj:   enum.asm
+        masm -z-t-Ml-b63 enum;
+
+colorinf.obj:   colorinf.asm
+        masm -z-t-Ml-b63 colorinf;
+
+pixel.obj:   pixel.asm
+        masm -z-t-Ml-b63 pixel;
+
+egainit.obj:   egainit.asm
+        masm -z-t-Ml-b63 egainit;
+
+output.obj:   output.asm
+        masm -z-t-Ml-b63 output;
+
+scanlr.obj:   scanlr.asm
+        masm -z-t-Ml-b63 scanlr;
+
+scanline.obj:   scanline.asm
+        masm -z-t-Ml-b63 scanline;
+
+polyline.obj:   polyline.asm polyline.inc plylocal.inc
+        masm -z-t-Ml-b63 polyline;
+
+strblt.obj:   strblt.asm strblt.inc fontseg.inc
+        masm -z-t-Ml-b63 strblt;
+
+ssb.obj:   ssb.asm
+        masm -z-t-Ml-b63 ssb;
+
+bitblt.obj:                     bitblt.asm      \
+		                genlocal.blt	\
+				cursor.inc
+        masm -z-t-Ml-b63 bitblt;
+
+cursor.obj:      cursor.asm    egamemd.inc cursor.inc
+        masm -z-t-Ml-b63 cursor;
+
+egahibw.obj:   egahibw.asm
+        masm -z-t-Ml-b63 egahibw;
+
+3xswitch.obj:   3xswitch.asm
+        masm -z-t-Ml-b63 3xswitch;
+
+egahibw.drv: egahibw.def egahibw.lnk egahibw.res                \
+		         egahibw.obj	       cursor.obj	\
+		         bitblt.obj	       3xswitch.obj	\
+		          	       scanlr.obj	\
+		         pixel.obj	      	\
+		         output.obj	       polyline.obj	\
+		         strblt.obj	       	\
+		         scanline.obj				\
+		         ssb.obj	       egainit.obj	\
+		         robject.obj	       colorinf.obj	\
+		         enum.obj				\
+		         control.obj           cursors.obj	\
+		         inquire.obj           setmode.obj	\
+                         dither.obj            disable.obj      \
+		         enable.obj            chkstk.obj	\
+		         charwdth.obj          fb.obj		\
+                         sswitch.obj
+    link4 @egahibw.lnk
+    rc egahibw.res egahibw.drv
+    copy egahibw.map display.map
+    mapsym display    
+    copy display.sym egahibw.sym
+    erase display.sym
+    erase display.map
+
